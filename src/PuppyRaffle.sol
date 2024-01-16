@@ -208,7 +208,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @dev we send 80% of the funds to the winner, the other 20% goes to the feeAddress
     function selectWinner() external {
         //@audit  does it adhere to the CEI flow
-        //@audit how do miners influence block.timestamp, now and blockhac
+        //@audit how do miners influence block.timestamp, now and blockhash
         require(
             block.timestamp >= raffleStartTime + raffleDuration,
             "PuppyRaffle: Raffle not over"
