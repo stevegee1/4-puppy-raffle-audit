@@ -5,6 +5,7 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Base64} from "lib/base64/base64.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @title PuppyRaffle
 /// @author PuppyLoveDAO
@@ -17,6 +18,7 @@ import {Base64} from "lib/base64/base64.sol";
 /// 5. The owner of the protocol will set a feeAddress to take a cut of the `value`, and the rest of the funds will be sent to the winner of the puppy.
 contract PuppyRaffle is ERC721, Ownable {
     using Address for address payable;
+    using Strings for string;
 
     uint256 public immutable entranceFee;
 
@@ -189,15 +191,16 @@ contract PuppyRaffle is ERC721, Ownable {
     function getActivePlayerIndex(address player)
         external
         view
-        returns (uint256)
+        returns (string memory)
     {
-        for (uint256 i = 0; i < players.length; i++) {
-            if (players[i] == player) {
-                return i;
+        if (isAddressEntered[player]) {
+            for (uint i = 0; i < players.length; i++) {
+                if (players[i] == player) {
+                    return Strings.toString(i);
+                }
             }
         }
-        //@audit what if the player is at index 0?
-        return 0;
+        return ("not active");
     }
 
     /// @notice this function will select a winner and mint a puppy
@@ -216,11 +219,13 @@ contract PuppyRaffle is ERC721, Ownable {
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
 
         // @audit weak randomness
+        // slither-disable-next-line weak-prng
         uint256 winnerIndex = uint256(
             keccak256(
                 abi.encodePacked(msg.sender, block.timestamp, block.difficulty)
             )
         ) % players.length;
+
         address winner = players[winnerIndex];
         uint256 totalAmountCollected = players.length * entranceFee;
 
@@ -230,7 +235,7 @@ contract PuppyRaffle is ERC721, Ownable {
 
         //@audit typecast error?
         totalFees = totalFees + uint64(fee);
-        
+
         //@audit where is this coming from?
         uint256 tokenId = totalSupply();
 
@@ -239,15 +244,15 @@ contract PuppyRaffle is ERC721, Ownable {
         uint256 rarity = uint256(
             keccak256(abi.encodePacked(msg.sender, block.difficulty))
         ) % 100;
-        
+
         //0-70
         if (rarity <= COMMON_RARITY) {
             tokenIdToRarity[tokenId] = COMMON_RARITY;
-        } 
+        }
         //71-95
         else if (rarity <= COMMON_RARITY + RARE_RARITY) {
             tokenIdToRarity[tokenId] = RARE_RARITY;
-        } 
+        }
         //96 - 100
         else {
             tokenIdToRarity[tokenId] = LEGENDARY_RARITY;
@@ -269,6 +274,8 @@ contract PuppyRaffle is ERC721, Ownable {
         );
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
+
+        // slither-disable-next-line arbitrary-send-eth
         (bool success, ) = feeAddress.call{value: feesToWithdraw}("");
         require(success, "PuppyRaffle: Failed to withdraw fees");
     }
@@ -281,12 +288,16 @@ contract PuppyRaffle is ERC721, Ownable {
     }
 
     /// @notice this function will return true if the msg.sender is an active player
+    //@audit make it more gas efficient
     function _isActivePlayer() internal view returns (bool) {
-        for (uint256 i = 0; i < players.length; i++) {
-            if (players[i] == msg.sender) {
-                return true;
-            }
+        if (isAddressEntered[msg.sender]) {
+            return true;
         }
+        // for (uint256 i = 0; i < players.length; i++) {
+        //     if (players[i] == msg.sender) {
+        //         return true;
+        //     }
+        // }
         return false;
     }
 

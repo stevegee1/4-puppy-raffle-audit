@@ -196,3 +196,144 @@ contract REENTRANCY_ATTACK {
 </details>
 
 **Recommended Mitigation:** 
+
+Ensure the logic of your codebase conforms to the CEI flow:
+* C: check, require statement
+* E: Effect, update changes to the state variables if any
+* I: Interaction, only make external calls then.
+
+<details>
+<summary>Proof of Code</summary>
+
+```diff
+@> refund function: 
+-       payable(msg.sender).sendValue(entranceFee);
+-       players[playerIndex] = address(0);
+
++         players[playerIndex] = address(0);
++         payable(msg.sender).sendValue(entranceFee);
+```
+
+</details>
+
+### [S-#] A logical error that leads to unexpected outcomes
+
+**Description:** 
+
+`PuppyRaffle::getActivePlayerIndex` is intended to return `uint 0` if the address is not active in an on-going Raffle. However, an active address with an index of zero in the `PuppyRaffle::players` will also return  `uint 0`.
+
+**Impact:** 
+ unexpected behaviour/outcome of `PuppyRaffle::getActivePlayerIndex` when called.
+
+**Proof of Concept:**
+
+<details>
+
+Paste this in the test suite, `PuppyRaffleTest.t.sol`
+
+<summary>Proof of Code</summary>
+
+```javascript
+    function testGetActivePlayerLogicError() public {
+        address[] memory players = new address[](1);
+        //only a user entered the raffle
+        players[0] = playerOne;
+        puppyRaffle.enterRaffle{value: entranceFee * 1}(players);
+
+        //inactive player should return zero(uint)
+        uint inActivePlayer= puppyRaffle.getActivePlayerIndex(playerTwo);
+
+        //while an active player will return zero(uint) as well
+         uint ActivePlayer= puppyRaffle.getActivePlayerIndex(playerOne);
+
+       assertEq(inActivePlayer, ActivePlayer);
+    }
+```
+</details>
+
+**Recommended Mitigation:** 
+
+Inactive address will return the string "not active" instead
+
+```diff
+- for (uint256 i = 0; i < players.length; i++) {
+-           if (players[i] == player) {
+-               return i;
+-           }
+-       }
+-       return 0;
+.
+.
+.
++   if (isAddressEntered[player]) {
++           for (uint i = 0; i < players.length; i++) {
++               players[i] == player;
++               return Strings.toString( i);
++           }
++       }
++       return ("not active");
+```
+
+### [S-#] Weak randomness, the winner index can be influenced
+
+**Description:** 
+
+For `PuppyRaffle::selectWinner`, using deterministic global variables such as "block.timestamp, block.difficulty, now" can be manipulated 
+
+**Impact:** 
+A malicious validator/miner can win and/or mint a rare NFT breed
+
+**Proof of Concept:**
+<details>
+
+<summary>Proof of Code</summary>
+
+```javascript
+   function test_exploitWeakRandomness() public {
+        address maliciousMiner = makeAddr("miner");
+        address[] memory players = new address[](5);
+
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        players[4] = maliciousMiner;
+        puppyRaffle.enterRaffle{value: entranceFee * 5}(players);
+        //by simulating a predetermined block difficulty and timestamp we can prove
+        //that a miner/validator can do that too
+        vm.warp(1678989);
+        //console.log(block.timestamp);
+        vm.prevrandao(bytes32(uint(25)));
+       // console.log(block.difficulty);
+        uint winningIndexManipulated = uint256(
+            keccak256(
+                abi.encodePacked(msg.sender, block.timestamp, block.difficulty)
+            )
+        ) % players.length;
+         string memory maliciousMinerIndex = puppyRaffle.getActivePlayerIndex(
+            maliciousMiner
+        );
+        address x= puppyRaffle.players(4);
+        console.log(x, maliciousMiner,playerOne);
+        assertEq(maliciousMinerIndex, Strings.toString(winningIndexManipulated));
+    }
+```
+
+</details>
+
+**Recommended Mitigation:** 
+
+Implement chainlink veriable randomness [Chainlink_vrk](https://chain.link/vrf)
+
+Note: onchain seeds are pre-deterministic
+
+
+### [S-#] TITLE (Root Cause + Impact)
+
+**Description:** 
+
+**Impact:** 
+
+**Proof of Concept:**
+
+**Recommended Mitigation:** 
