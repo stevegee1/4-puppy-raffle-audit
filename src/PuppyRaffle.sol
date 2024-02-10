@@ -178,7 +178,6 @@ contract PuppyRaffle is ERC721, Ownable {
         );
 
         // @audit non-CEI flow- Reentrancy attack?
-
         payable(msg.sender).sendValue(entranceFee);
 
         players[playerIndex] = address(0);
@@ -219,7 +218,7 @@ contract PuppyRaffle is ERC721, Ownable {
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
 
         // @audit weak randomness
-        // slither-disable-next-line weak-prng
+    
         uint256 winnerIndex = uint256(
             keccak256(
                 abi.encodePacked(msg.sender, block.timestamp, block.difficulty)
@@ -236,7 +235,7 @@ contract PuppyRaffle is ERC721, Ownable {
         //@audit typecast error?
         totalFees = totalFees + uint64(fee);
 
-        //@audit where is this coming from?
+      
         uint256 tokenId = totalSupply();
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
@@ -267,6 +266,8 @@ contract PuppyRaffle is ERC721, Ownable {
     }
 
     /// @notice this function will withdraw the fees to the feeAddress
+
+    //@audit dangerous-strict-equalities
     function withdrawFees() external {
         require(
             address(this).balance == uint256(totalFees),
